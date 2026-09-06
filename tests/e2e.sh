@@ -3,18 +3,18 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-NET=soniox-shim-e2e
-MOCK=soniox-shim-e2e-mock
-SHIM=soniox-shim-e2e-shim
+NET=soniox-openai-shim-e2e
+MOCK=soniox-openai-shim-e2e-mock
+SHIM=soniox-openai-shim-e2e-shim
 MOCK_PORT=8898
 SHIM_PORT=8899
-IMAGE=soniox-shim:e2e
+IMAGE=soniox-openai-shim:e2e
 # Split out so the literal header does not look like a secret to scanners.
 HDR_NAME="Authoriz""ation"
 
 drop_containers() {
-  docker rm -f "$MOCK" "$SHIM" soniox-shim-e2e-gated \
-    soniox-shim-e2e-failmock soniox-shim-e2e-failshim >/dev/null 2>&1 || true
+  docker rm -f "$MOCK" "$SHIM" soniox-openai-shim-e2e-gated \
+    soniox-openai-shim-e2e-failmock soniox-openai-shim-e2e-failshim >/dev/null 2>&1 || true
   docker network rm "$NET" >/dev/null 2>&1 || true
 }
 cleanup() {
@@ -85,7 +85,7 @@ echo "$state" | grep -q 'file:file_test' || fail "file not deleted: $state"
 
 # Gated mode: the bearer token becomes a password, and must not be usable as a
 # Soniox key. This is what makes the service safe to expose beyond localhost.
-GATED=soniox-shim-e2e-gated
+GATED=soniox-openai-shim-e2e-gated
 GATED_PORT=8896
 # Generated at run time: a literal token here trips secret scanners.
 TOKEN=$(openssl rand -hex 16)
@@ -145,8 +145,8 @@ docker rm -f "$GATED" >/dev/null 2>&1 || true
 
 # A failed job still has to be cleaned up: background tasks are dropped when the
 # response comes from an exception handler, so this path must clean up inline.
-FAILMOCK=soniox-shim-e2e-failmock
-FAILSHIM=soniox-shim-e2e-failshim
+FAILMOCK=soniox-openai-shim-e2e-failmock
+FAILSHIM=soniox-openai-shim-e2e-failshim
 FAILMOCK_PORT=8894
 FAILSHIM_PORT=8893
 docker run -d --name "$FAILMOCK" --network "$NET" -p "127.0.0.1:$FAILMOCK_PORT:8756" \

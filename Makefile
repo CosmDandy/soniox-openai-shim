@@ -31,7 +31,7 @@ bench:  ## compare transports: make bench AUDIO=/dir (must contain sample.wav)
 	@test -f "$(AUDIO)/sample.wav" || { echo "no sample.wav in $(AUDIO)" >&2; exit 1; }
 	# The runtime image already carries httpx and websockets (via uvicorn[standard]),
 	# so the benchmark needs no image of its own.
-	docker build -q -t soniox-shim:local . >/dev/null
+	docker build -q -t soniox-openai-shim:local . >/dev/null
 	$(SOPS) 'docker run --rm -e SONIOX_API_KEY \
 	  -v "$(PWD)/tests:/app/tests:ro" -v "$(AUDIO):/audio:ro" \
-	  --entrypoint python soniox-shim:local /app/tests/bench.py /audio/sample.wav'
+	  --entrypoint python soniox-openai-shim:local /app/tests/bench.py /audio/sample.wav'

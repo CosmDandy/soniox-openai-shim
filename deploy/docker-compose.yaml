@@ -3,12 +3,12 @@
 #
 # Unlike the localhost stack this one is reachable from the internet, so
 # SHIM_AUTH_TOKEN is mandatory: without it the shim serves anyone who finds it.
-name: soniox-shim
+name: soniox-openai-shim
 
 services:
-  soniox-shim:
+  soniox-openai-shim:
     image: ${SHIM_IMAGE:-ghcr.io/cosmdandy/soniox-openai-shim:latest}
-    container_name: soniox-shim
+    container_name: soniox-openai-shim
     restart: unless-stopped
 
     environment:
@@ -57,12 +57,12 @@ services:
     labels:
       traefik.enable: "true"
       traefik.docker.network: edge
-      traefik.http.routers.soniox-shim.entrypoints: websecure
-      traefik.http.routers.soniox-shim.rule: Host(`${SHIM_DOMAIN:?set SHIM_DOMAIN in .env}`)
-      traefik.http.routers.soniox-shim.tls.certresolver: letsencrypt
-      traefik.http.services.soniox-shim.loadbalancer.server.port: "8756"
+      traefik.http.routers.soniox-openai-shim.entrypoints: websecure
+      traefik.http.routers.soniox-openai-shim.rule: Host(`${SHIM_DOMAIN:?set SHIM_DOMAIN in .env}`)
+      traefik.http.routers.soniox-openai-shim.tls.certresolver: letsencrypt
+      traefik.http.services.soniox-openai-shim.loadbalancer.server.port: "8756"
       # Dictation is bursty but low-rate; this only clips a runaway client.
-      traefik.http.routers.soniox-shim.middlewares: soniox-ratelimit,soniox-bodylimit
+      traefik.http.routers.soniox-openai-shim.middlewares: soniox-ratelimit,soniox-bodylimit
       traefik.http.middlewares.soniox-ratelimit.ratelimit.average: "30"
       traefik.http.middlewares.soniox-ratelimit.ratelimit.burst: "10"
       # The real ceiling: the shim only sees a body after it has been received,

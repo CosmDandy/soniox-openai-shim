@@ -1,10 +1,10 @@
-name: soniox-shim
+name: soniox-openai-shim
 
 services:
-  soniox-shim:
+  soniox-openai-shim:
     build: .
-    image: soniox-shim:local
-    container_name: soniox-shim
+    image: soniox-openai-shim:local
+    container_name: soniox-openai-shim
     restart: unless-stopped
 
     environment:

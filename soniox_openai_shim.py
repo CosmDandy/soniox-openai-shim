@@ -1,5 +1,5 @@
 """
-soniox-shim — OpenAI-compatible /v1/audio/transcriptions endpoint backed by Soniox.
+soniox-openai-shim — OpenAI-compatible /v1/audio/transcriptions endpoint backed by Soniox.
 
 Spokenly (or any client that speaks the OpenAI transcription API) points at this
 service; it translates the single synchronous OpenAI call into Soniox's async
@@ -22,7 +22,7 @@ Run (docker):
 
 Run (bare):
     export SONIOX_API_KEY=...
-    uvicorn soniox_shim:app --host 127.0.0.1 --port 8756
+    uvicorn soniox_openai_shim:app --host 127.0.0.1 --port 8756
 """
 
 from __future__ import annotations
@@ -130,7 +130,7 @@ async def lifespan(app: FastAPI):
     await _client.aclose()
 
 
-app = FastAPI(title="soniox-shim", lifespan=lifespan)
+app = FastAPI(title="soniox-openai-shim", lifespan=lifespan)
 
 # Endpoints a probe or a client legitimately calls without credentials.
 PUBLIC_PATHS = {"/health", "/v1/models"}

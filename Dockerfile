@@ -9,7 +9,7 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY soniox_shim.py ./
+COPY soniox_openai_shim.py ./
 
 RUN useradd --create-home --uid 10001 shim \
     && mkdir -p /data && chown shim:shim /data
@@ -23,4 +23,4 @@ EXPOSE 8756
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD ["python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8756/health', timeout=3).status == 200 else 1)"]
 
-CMD ["uvicorn", "soniox_shim:app", "--host", "0.0.0.0", "--port", "8756"]
+CMD ["uvicorn", "soniox_openai_shim:app", "--host", "0.0.0.0", "--port", "8756"]
