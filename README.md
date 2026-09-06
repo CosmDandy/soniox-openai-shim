@@ -1,5 +1,7 @@
 # soniox-openai-shim
 
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/CosmDandy/soniox-openai-shim)
+
 An OpenAI-compatible `/v1/audio/transcriptions` endpoint backed by [Soniox](https://soniox.com).
 
 Dictation clients that speak the OpenAI transcription API — Spokenly, among others — send one
