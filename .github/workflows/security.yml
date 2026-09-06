@@ -1,0 +1,133 @@
+# Базовые security-гейты. Все actions запиннены по полному commit SHA, а не по
+# тегу: тег может быть перемещён владельцем экшена на другой код. Это не
+# паранойя — в марте 2026 у trivy-action force-push'ем переписали 75 из 76
+# тегов версий, и пайплайны с `@v0.x` начали выгружать секреты. Версия в
+# комментарии — для читаемости, обновление пинов автоматизирует Dependabot.
+name: security
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  schedule:
+    # Раз в неделю: новые CVE и правила появляются без коммитов в репозиторий.
+    - cron: "0 6 * * 1"
+
+# Пусто на уровне workflow — каждая job запрашивает права явно и минимально.
+permissions: {}
+
+jobs:
+  secrets:
+    name: secrets (gitleaks)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Вся история: секрет, удалённый следующим коммитом, остаётся в ней навсегда.
+          fetch-depth: 0
+          # По умолчанию checkout пишет токен в .git/config, откуда его прочитает
+          # любой последующий шаг. Здесь он не нужен.
+          persist-credentials: false
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  encrypted:
+    name: sops-файлы зашифрованы
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Расшифрованный sops-файл — обычный YAML, и gitleaks его не ловит: токен
+      # Proxmox или пароль сервиса не подходят под известные паттерны. Признак
+      # зашифрованного файла — служебный блок `sops:` с метаданными.
+      #
+      # Это ДУБЛЬ локального pre-commit из dotfiles, и дубль намеренный: хук
+      # стоит только на моих машинах (core.hooksPath), а .envrc и секреты
+      # уезжают в общий репозиторий. Гейт ничего не предотвращает — к моменту
+      # его срабатывания коммит уже на сервере, и секрет надо считать
+      # скомпрометированным и ротировать. Его работа — не дать этому пройти
+      # незамеченным и не пустить в основную ветку.
+      - name: каждый *.sops.* должен быть зашифрован
+        run: |
+          status=0
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            grep -q '^sops:' "$f" || { echo "::error file=$f::plaintext — файл не зашифрован (sops -e -i)"; status=1; }
+          done < <(git ls-files '*.sops.yaml' '*.sops.yml' '*.sops.json' \
+            | grep -vE '(^|/)\.sops\.(yaml|yml)$' || true)   # сам конфиг не шифруется
+          exit $status
+
+  iac:
+    name: iac (trivy)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # для загрузки SARIF в Security tab (бесплатно для публичных репо)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # trivy config заменяет tfsec (свёрнут в trivy) и terrascan (архивирован
+      # 2025-11-20). Покрывает Terraform, Kubernetes, Helm, Dockerfile, Ansible.
+      #
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          hide-progress: true
+
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        if: always()
+        with:
+          scan-type: config
+          scan-ref: .
+          format: sarif
+          output: trivy.sarif
+          hide-progress: true
+      - uses: github/codeql-action/upload-sarif@e58424170fb0262c8d7ed60a2e84b9bffe205c67 # codeql-bundle-v2.26.1
+        if: always()
+        # В приватных репо без GHAS загрузка SARIF недоступна — не роняем job.
+        continue-on-error: true
+        with:
+          sarif_file: trivy.sarif
+          category: trivy
+
+  workflows:
+    name: workflow-конфиги (zizmor)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Нишу «безопасность самих CI-конфигов» trivy и checkov не покрывают.
+      # zizmor ловит непиннутые uses:, template injection, pwn-request через
+      # pull_request_target, избыточные permissions, утечку кред в артефакты.
+      #
+      # Экшен грузит находки в Security tab, но НЕ роняет job: входа «упасть при
+      # находках» у него нет вовсе. Поэтому гейт — отдельным шагом ниже.
+      #
+      # continue-on-error: в приватном репозитории без GHAS загрузка SARIF в
+      # code scanning недоступна, и экшен падает на ней. Это проблема доставки
+      # отчёта, а не находка — блокировать из-за неё нельзя, иначе гейт ниже
+      # вообще не выполнится (шаг после упавшего пропускается).
+      - uses: zizmorcore/zizmor-action@6fc4b006235f201fdab3722e17240ab420d580e5 # v0.6.1
+        continue-on-error: true
+
+      # Настоящий гейт: CLI возвращает 14 при находках и 0 на чистом конфиге.
+      # Порог medium — informational (например template-injection с низкой
+      # уверенностью) не роняет CI, всё остальное роняет. Версия закреплена по
+      # той же причине, что actions пиннятся по SHA: воспроизводимость прогона.
+      - name: zizmor (гейт)
+        run: pipx run zizmor==1.28.0 --offline --min-severity=medium .
