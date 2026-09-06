@@ -7,7 +7,9 @@ name: soniox-openai-shim
 
 services:
   soniox-openai-shim:
-    image: ${SHIM_IMAGE:-ghcr.io/cosmdandy/soniox-openai-shim:latest}
+    # Pinned on purpose: :latest would silently change what runs on the next
+    # `docker compose up`. Bump this line when you mean to upgrade.
+    image: ${SHIM_IMAGE:-ghcr.io/cosmdandy/soniox-openai-shim:0.1.0}
     container_name: soniox-openai-shim
     restart: unless-stopped
 
