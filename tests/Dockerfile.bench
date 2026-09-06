@@ -1,0 +1,5 @@
+# httpx is needed only by the benchmark, not by the shim at runtime.
+FROM soniox-shim:local
+USER root
+RUN pip install --no-cache-dir httpx==0.28.1
+USER shim

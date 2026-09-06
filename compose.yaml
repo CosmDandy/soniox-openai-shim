@@ -1,0 +1,77 @@
+services:
+  soniox-shim:
+    build: .
+    image: soniox-shim:local
+    container_name: soniox-shim
+    restart: unless-stopped
+
+    environment:
+      # The only secret. Injected by `make up` from secrets.sops.yaml;
+      # compose fails loudly rather than starting without it.
+      SONIOX_API_KEY: ${SONIOX_API_KEY:?run make up - the key comes from secrets.sops.yaml}
+
+      # Async batch model. Soniox rev these often; check soniox.com/docs/stt/models.
+      # A real-time id (stt-rt-*) is translated to its async twin automatically.
+      SONIOX_MODEL: stt-async-v5
+
+      # Language hints drive code-switching accuracy.
+      SONIOX_LANGUAGE_HINTS: ru,en
+
+      # Sets the subject before the term list narrows it down.
+      SONIOX_CONTEXT_DOMAIN: >-
+        DevOps and homelab infrastructure: Kubernetes, Proxmox, GitOps,
+        networking and server administration. Speech is Russian with English
+        technical terms mixed in.
+
+      # The single biggest lever on accuracy: anything missing here comes back
+      # mangled ("Victory Matrix" for VictoriaMetrics). The whole context object
+      # may run to ~10000 characters, so there is plenty of room to keep adding.
+      SONIOX_CONTEXT_TERMS: >-
+        Kubernetes, k8s, Talos, Proxmox, Cilium, Longhorn, MetalLB, ArgoCD,
+        GitOps, Helm, Traefik, cert-manager, external-dns, Sealed Secrets,
+        External Secrets, CloudNativePG, Velero, Renovate, metrics-server,
+        kube-prometheus-stack, Prometheus, Grafana, Grafana Alloy, Loki,
+        GitLab, GitLab CI, GitLab Runner, Nexus, PowerDNS, SeaweedFS, MinIO,
+        OpenSearch, VictoriaMetrics, Vector, Gatus, node-exporter,
+        postgres-exporter, PostgreSQL, Redis, Odoo, Nextcloud, Paperless-ngx,
+        Photoprism, Jellyfin, Atuin, Home Assistant, Homepage, Authentik,
+        Terraform, Ansible, Nomad, Docker, Docker Compose, OrbStack, Colima,
+        Lima, UTM, Devpod, sops, age, Nix, home-manager, tmux, zsh,
+        Claude Code, IPMI, BMC, Serial-over-LAN, PXE, TFTP, DHCP, VLAN,
+        nftables, tcpdump, MTU, kubectl, Ingress, Gateway API, PVC,
+        StorageClass, DaemonSet, StatefulSet, namespace, systemd, journalctl,
+        WireGuard, Tailscale
+
+      # Regional endpoint. Bare host is US; EU is https://api.eu.soniox.com.
+      SONIOX_BASE_URL: https://api.soniox.com
+
+      # Jobs finish in ~2s, so poll tight - the request is blocked on it anyway.
+      SONIOX_POLL_INTERVAL: "0.1"
+      SONIOX_POLL_TIMEOUT: "300"
+
+      # Async price per audio hour, used only by /stats.
+      SONIOX_PRICE_PER_HOUR: "0.10"
+
+    # Localhost only: Spokenly talks to it from this machine, nobody else should.
+    ports:
+      - "127.0.0.1:8756:8756"
+
+    # Usage log survives rebuilds; it is what /stats reports on.
+    volumes:
+      - usage:/data
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8756/health', timeout=3).status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  usage:
