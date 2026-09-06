@@ -27,7 +27,9 @@ test:  ## end-to-end run against the mock, no Soniox key needed
 	./tests/e2e.sh
 
 bench:  ## compare transports on real audio: make bench AUDIO=/path/to/dir
-	docker build -q -t soniox-shim:bench -f tests/Dockerfile.bench . >/dev/null
+	# The runtime image already carries httpx and websockets (via uvicorn[standard]),
+	# so the benchmark needs no image of its own.
+	docker build -q -t soniox-shim:local . >/dev/null
 	$(SOPS) 'docker run --rm -e SONIOX_API_KEY \
 	  -v "$(PWD)/tests:/app/tests:ro" -v "$(AUDIO):/audio:ro" \
-	  --entrypoint python soniox-shim:bench /app/tests/bench.py /audio/sample.wav'
+	  --entrypoint python soniox-shim:local /app/tests/bench.py /audio/sample.wav'

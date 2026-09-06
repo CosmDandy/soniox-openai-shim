@@ -3,8 +3,7 @@
 Runs inside the shim container so it inherits SONIOX_API_KEY from the compose
 env file: no key ever has to be printed or passed on a command line.
 
-    docker compose run --rm -v "$PWD/tests:/app/tests:ro" -v /some/audio:/audio:ro \
-        --entrypoint python soniox-shim /app/tests/bench.py /audio/speech.wav
+    make bench AUDIO=/path/to/dir-with-sample.wav
 """
 
 import asyncio
