@@ -1,0 +1,92 @@
+# Example stack for a server that already runs Traefik on an `edge` network.
+# Secrets and the hostname come from .env next to this file.
+#
+# Unlike the localhost stack this one is reachable from the internet, so
+# SHIM_AUTH_TOKEN is mandatory: without it the shim serves anyone who finds it.
+name: soniox-openai-shim
+
+services:
+  soniox-openai-shim:
+    image: ${SHIM_IMAGE:-ghcr.io/cosmdandy/soniox-openai-shim:latest}
+    container_name: soniox-openai-shim
+    restart: unless-stopped
+
+    environment:
+      SONIOX_API_KEY: ${SONIOX_API_KEY:?set it in .env}
+      # Mandatory here. Generate with: openssl rand -base64 32
+      SHIM_AUTH_TOKEN: ${SHIM_AUTH_TOKEN:?set it in .env}
+
+      # Pick the region closest to the server: measured from Stockholm, TLS to
+      # api.eu.soniox.com takes 0.13s against 0.33s to the US endpoint. Mind that
+      # keys are region-bound — a US key is rejected with 401 by the EU endpoint,
+      # so switch only together with a key issued in that region.
+      SONIOX_BASE_URL: ${SONIOX_BASE_URL:-https://api.soniox.com}
+
+      SONIOX_MODEL: stt-async-v5
+      SONIOX_LANGUAGE_HINTS: ru,en
+      SONIOX_CONTEXT_DOMAIN: >-
+        DevOps and homelab infrastructure: Kubernetes, Proxmox, GitOps,
+        networking and server administration. Speech is Russian with English
+        technical terms mixed in.
+      SONIOX_CONTEXT_TERMS: >-
+        Kubernetes, k8s, Talos, Proxmox, Cilium, Longhorn, MetalLB, ArgoCD,
+        GitOps, Helm, Traefik, cert-manager, external-dns, Sealed Secrets,
+        External Secrets, CloudNativePG, Velero, Renovate, metrics-server,
+        kube-prometheus-stack, Prometheus, Grafana, Grafana Alloy, Loki,
+        GitLab, GitLab CI, GitLab Runner, Nexus, PowerDNS, SeaweedFS, MinIO,
+        OpenSearch, VictoriaMetrics, Vector, Gatus, node-exporter,
+        postgres-exporter, PostgreSQL, Redis, Odoo, Nextcloud, Paperless-ngx,
+        Photoprism, Jellyfin, Atuin, Home Assistant, Homepage, Authentik,
+        Terraform, Ansible, Nomad, Docker, Docker Compose, OrbStack, Colima,
+        Lima, UTM, Devpod, sops, age, Nix, home-manager, tmux, zsh,
+        Claude Code, IPMI, BMC, Serial-over-LAN, PXE, TFTP, DHCP, VLAN,
+        nftables, tcpdump, MTU, kubectl, Ingress, Gateway API, PVC,
+        StorageClass, DaemonSet, StatefulSet, namespace, systemd, journalctl,
+        WireGuard, Tailscale
+      SONIOX_POLL_INTERVAL: "0.1"
+      SONIOX_POLL_TIMEOUT: "300"
+      SONIOX_PRICE_PER_HOUR: "0.10"
+
+    # No published ports: the only way in is through traefik on the edge network.
+    networks:
+      - edge
+
+    volumes:
+      - usage:/data
+
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: edge
+      traefik.http.routers.soniox-openai-shim.entrypoints: websecure
+      traefik.http.routers.soniox-openai-shim.rule: Host(`${SHIM_DOMAIN:?set SHIM_DOMAIN in .env}`)
+      traefik.http.routers.soniox-openai-shim.tls.certresolver: letsencrypt
+      traefik.http.services.soniox-openai-shim.loadbalancer.server.port: "8756"
+      # Dictation is bursty but low-rate; this only clips a runaway client.
+      traefik.http.routers.soniox-openai-shim.middlewares: soniox-ratelimit,soniox-bodylimit
+      traefik.http.middlewares.soniox-ratelimit.ratelimit.average: "30"
+      traefik.http.middlewares.soniox-ratelimit.ratelimit.burst: "10"
+      # The real ceiling: the shim only sees a body after it has been received,
+      # so an oversized upload must be refused here, at the edge. 64 MiB is
+      # roughly half an hour of the WAV a dictation client sends.
+      traefik.http.middlewares.soniox-bodylimit.buffering.maxRequestBodyBytes: "67108864"
+      traefik.http.middlewares.soniox-bodylimit.buffering.memRequestBodyBytes: "2097152"
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8756/health', timeout=3).status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  edge:
+    external: true
+
+volumes:
+  usage:
