@@ -35,6 +35,10 @@ jobs:
         with:
           persist-credentials: false
 
+      # Раннер по умолчанию даёт драйвер docker, а он не умеет экспортировать
+      # кэш: без этого шага build-push-action падает на cache-to type=gha.
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
