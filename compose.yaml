@@ -1,3 +1,5 @@
+name: soniox-shim
+
 services:
   soniox-shim:
     build: .

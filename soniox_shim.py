@@ -172,7 +172,8 @@ async def _create_job(auth: dict[str, str], file_id: str, model: str, language: 
     return resp.json()["id"]
 
 
-async def _await_completion(auth: dict[str, str], job_id: str) -> None:
+async def _await_completion(auth: dict[str, str], job_id: str) -> int:
+    """Waits for the job and returns the audio duration in ms, as Soniox measured it."""
     deadline = asyncio.get_event_loop().time() + POLL_TIMEOUT
     while True:
         resp = await _client.get(f"/v1/transcriptions/{job_id}", headers=auth)
@@ -181,7 +182,9 @@ async def _await_completion(auth: dict[str, str], job_id: str) -> None:
         status = body.get("status")
 
         if status == "completed":
-            return
+            # Not the last token's end_ms: that stops at the last word and drops
+            # the trailing silence, which understates real dictations by ~20%.
+            return int(body.get("audio_duration_ms") or 0)
         if status == "error":
             raise HTTPException(502, f"Soniox job failed: {body.get('error_message', 'unknown')}")
         if asyncio.get_event_loop().time() > deadline:
@@ -190,19 +193,16 @@ async def _await_completion(auth: dict[str, str], job_id: str) -> None:
         await asyncio.sleep(POLL_INTERVAL)
 
 
-async def _fetch_transcript(auth: dict[str, str], job_id: str) -> tuple[str, int]:
-    """Returns (text, audio duration in ms)."""
+async def _fetch_transcript(auth: dict[str, str], job_id: str) -> str:
     resp = await _client.get(f"/v1/transcriptions/{job_id}/transcript", headers=auth)
     resp.raise_for_status()
     body = resp.json()
 
-    tokens = body.get("tokens") or []
-    audio_ms = max((int(tok.get("end_ms") or 0) for tok in tokens), default=0)
-
     if isinstance(body.get("text"), str):
-        return body["text"].strip(), audio_ms
+        return body["text"].strip()
     # Older shapes return token lists instead of a joined string.
-    return "".join(tok.get("text", "") for tok in tokens).strip(), audio_ms
+    tokens = body.get("tokens") or []
+    return "".join(tok.get("text", "") for tok in tokens).strip()
 
 
 async def _cleanup(auth: dict[str, str], job_id: str | None, file_id: str | None) -> None:
@@ -302,8 +302,8 @@ async def transcriptions(
     try:
         file_id = await _upload(auth, file.filename or "audio.wav", blob)
         job_id = await _create_job(auth, file_id, soniox_model, language)
-        await _await_completion(auth, job_id)
-        text, audio_ms = await _fetch_transcript(auth, job_id)
+        audio_ms = await _await_completion(auth, job_id)
+        text = await _fetch_transcript(auth, job_id)
     except httpx.HTTPStatusError as exc:
         background.add_task(_cleanup, auth, job_id, file_id)
         detail = exc.response.text[:500]

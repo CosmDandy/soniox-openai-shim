@@ -120,7 +120,8 @@ docker rm -f "$GATED" >/dev/null 2>&1 || true
 
 stats=$(curl -sf "http://127.0.0.1:$SHIM_PORT/stats")
 echo "$stats" | grep -q '"dictations":2' || fail "usage not accounted: $stats"
-# Two dictations of six 500 ms tokens each.
+# Two dictations of 3000 ms each, as reported by audio_duration_ms. The mock's
+# tokens end at 2400 ms, so billing the speech instead of the audio fails here.
 echo "$stats" | grep -q '"audio_minutes":0.1' || fail "audio duration not tracked: $stats"
 
 echo "PASS: transcription, text format, empty-body guard, config passthrough,"

@@ -30,7 +30,11 @@ async def create(request: Request):
 async def poll(job_id: str):
     state["polls"] += 1
     # Report progress twice so the polling loop is actually exercised.
-    return {"status": "completed" if state["polls"] > 2 else "processing"}
+    if state["polls"] <= 2:
+        return {"status": "processing"}
+    # Deliberately longer than the last token ends: the shim must bill the audio,
+    # not the speech.
+    return {"status": "completed", "audio_duration_ms": 3000}
 
 
 @app.get("/v1/transcriptions/{job_id}/transcript")
@@ -38,7 +42,7 @@ async def transcript(job_id: str):
     return {
         "text": " ".join(WORDS),
         "tokens": [
-            {"text": w, "end_ms": (i + 1) * 500} for i, w in enumerate(WORDS)
+            {"text": w, "end_ms": (i + 1) * 400} for i, w in enumerate(WORDS)
         ],
     }
 
