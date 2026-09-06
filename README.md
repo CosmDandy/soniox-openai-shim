@@ -137,6 +137,23 @@ or absent one — including a non-ASCII one, which a naive constant-time compare
 that `/stats` is behind that gate while the health probe stays open, and that the shared secret
 never reaches Soniox in place of the API key.
 
+## Releases
+
+Images are published to `ghcr.io/cosmdandy/soniox-openai-shim` on every push to
+`master` as `master`, `latest` and `sha-<short>`, and on a version tag as the
+bare semver. Deployments should pin the semver — `latest` moves under you. Images are built
+for `linux/amd64` only; on another architecture build locally with `make up`.
+
+Cutting a release is one command; the tag is what triggers the versioned build:
+
+```bash
+git tag -a v0.2.0 -m "v0.2.0 — what changed"
+git push origin v0.2.0
+```
+
+Commits follow conventional commits, so the history reads as a changelog until
+there is reason to generate one.
+
 ## Licence
 
 MIT.
