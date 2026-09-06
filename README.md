@@ -29,16 +29,19 @@ docker compose up -d --build
 curl -s http://127.0.0.1:8756/health
 ```
 
-Point the client at `http://127.0.0.1:8756/v1` as an OpenAI-compatible provider. Any API key
-will do on the client side — the shim uses the one from its own environment. Whatever model
-name the client sends is mapped onto the Soniox model.
+Point the client at `http://127.0.0.1:8756/v1` as an OpenAI-compatible provider. Whatever the
+client has in its API-key field is ignored while `SONIOX_API_KEY` is set on the server, so put
+any placeholder there — `sk-noop` is as good as anything. A model name that does not start
+with `stt-` is replaced by the configured Soniox model; an `stt-rt-*` id is translated to its
+async twin.
 
 With [sops](https://github.com/getsops/sops) for the key, the bundled Makefile wraps the same
 thing: `make key` to edit it, `make up` to start, `make test`, `make stats`, `make bench`.
 
 ## Configuration
 
-Everything lives in `environment:` in `compose.yaml`.
+Everything except the secret lives in `environment:` in `compose.yaml`; the key comes from
+`secrets.sops.yaml`.
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -48,10 +51,12 @@ Everything lives in `environment:` in `compose.yaml`.
 | `SONIOX_LANGUAGE_HINTS` | `ru,en` | Language hints — the lever for code-switching accuracy. |
 | `SONIOX_CONTEXT_DOMAIN` | unset | Subject of the speech, sets the frame. |
 | `SONIOX_CONTEXT_TERMS` | unset | Comma-separated vocabulary. The single biggest accuracy lever. |
-| `SONIOX_BASE_URL` | `https://api.soniox.com` | Regional endpoint; EU is `https://api.eu.soniox.com`. |
+| `SONIOX_BASE_URL` | `https://api.soniox.com` | Regional endpoint; EU is `https://api.eu.soniox.com`. Keys are region-bound: a US key gets 401 from the EU endpoint, so changing region means issuing a key in that region's console. |
 | `SONIOX_POLL_INTERVAL` | `0.1` | Job polling step, seconds. |
 | `SONIOX_POLL_TIMEOUT` | `300` | Ceiling on one dictation, seconds. |
-| `SONIOX_PRICE_PER_HOUR` | `0.10` | Only used by `/stats`. |
+| `SONIOX_PRICE_PER_HOUR` | `0.10` | Price stamped on each entry when it is written; `/stats` only sums what was recorded. |
+| `SONIOX_USAGE_LOG` | `/data/usage.jsonl` | Where usage entries are appended. |
+| `SHIM_MAX_UPLOAD_BYTES` | `67108864` | Bodies declaring more than this are refused with 413 before being read. A client that lies about `Content-Length` still gets through, so keep a limit on the reverse proxy — the deploy example sets one. |
 
 ### The term list matters
 
@@ -83,26 +88,32 @@ with `tests/bench.py`, which times both transports phase by phase.
 
 End-to-end latency through the shim is 2.3–2.7 s, near-constant in the length of the dictation.
 Roughly one second of that is ours and ~1.85 s is Soniox computing. What is already squeezed:
-the HTTP connection pool is kept warm (a cold TLS handshake cost 0.83 s per dictation), cleanup
-runs after the response instead of before it, and polling is tightened to 100 ms.
+the HTTP connection pool is kept warm (paying for a cold connection on every dictation cost an
+extra 0.83 s in the upload phase), cleanup runs after the response instead of before it, and
+polling is tightened to 100 ms.
 
 ## Exposing it beyond localhost
 
-By default the shim has no authentication: an unset `SHIM_AUTH_TOKEN` means a bearer token from
-the client is either ignored or used as the Soniox key. That is only safe while the socket is
-bound to `127.0.0.1`.
+By default the shim has no authentication: with `SHIM_AUTH_TOKEN` unset, anyone who can reach
+the port is served on your Soniox key. That is only safe while the socket is bound to
+`127.0.0.1`, and the service says so in its log on every start.
 
 Set `SHIM_AUTH_TOKEN` before the service is reachable from anywhere else. It then becomes a
-password checked with `secrets.compare_digest`, and the Soniox key is taken from the environment
-only — so a caller who guesses their way in cannot substitute their own key or spend anything on
-your account.
+password, checked in constant time before the request body is parsed at all — an unauthenticated
+caller cannot make the service spool an upload to disk. `/stats` sits behind the same gate, since
+it reports how much you dictate and what it costs; `/health` and `/v1/models` stay open, because
+a healthcheck and a client's provider probe need them.
+
+The secret is never forwarded upstream: Soniox always sees the server's own key. The test suite
+asserts both halves of that, along with rejection of a wrong, absent or non-ASCII bearer.
 
 ```bash
 openssl rand -base64 32
 ```
 
 `deploy/docker-compose.yaml` is an example for a host already running Traefik: no published
-ports, TLS and routing from the reverse proxy, a rate limit, and the token required.
+ports, TLS and routing from the reverse proxy, a rate limit, a 64 MiB body cap at the edge, and
+the token required rather than optional.
 
 ## Usage and cost
 
@@ -110,15 +121,21 @@ ports, TLS and routing from the reverse proxy, a rate limit, and the token requi
 on the `usage` volume.
 
 At $0.10 per audio-hour, a heavy dictation habit is cheap: six months of one user's history —
-10 850 dictations, 77.5 hours — works out to $7.75, about $1.50 a month.
+10 850 dictations, 77.5 hours — works out to $7.75, about $1.30 a month. That history is
+uneven: a median day is 23 minutes, while the busiest single day was 213 minutes and would
+have cost 36 cents.
 
 ## Tests
 
 `./tests/e2e.sh` runs the whole path against a stub Soniox in a throwaway Docker network: no API
 key and no network access to Soniox required. It checks transcription, the text response format,
-the empty-upload guard, that config reaches the API in the documented shape, that cleanup
-happens, that usage is accounted, and that the token gate accepts the right token while
-rejecting a wrong or absent one.
+the empty-upload guard and the size ceiling, that config reaches the API in the documented shape,
+that the file and the job are deleted afterwards — including when the job fails, where a
+background task would have been dropped — that usage is billed from the audio duration rather
+than the last spoken word, that the token gate accepts the right token while rejecting a wrong
+or absent one — including a non-ASCII one, which a naive constant-time compare would crash on —
+that `/stats` is behind that gate while the health probe stays open, and that the shared secret
+never reaches Soniox in place of the API key.
 
 ## Licence
 

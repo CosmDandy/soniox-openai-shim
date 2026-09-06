@@ -1,12 +1,21 @@
-"""Stand-in for api.soniox.com, just enough to exercise the shim end to end."""
+"""Stand-in for api.soniox.com, just enough to exercise the shim end to end.
+
+MOCK_FAIL=1 makes every job fail, which is how the cleanup-on-error path is
+tested: the shim must still delete the file and the job.
+"""
+
+import os
 
 from fastapi import FastAPI, Request, UploadFile, File
 
 app = FastAPI()
 
+FAIL = os.environ.get("MOCK_FAIL") == "1"
+
 state = {
     "uploaded_bytes": 0,
     "job_payload": None,
+    "auth": None,
     "polls": 0,
     "deleted": [],
 }
@@ -23,12 +32,17 @@ async def upload(file: UploadFile = File(...)):
 @app.post("/v1/transcriptions")
 async def create(request: Request):
     state["job_payload"] = await request.json()
+    # Which credential actually reached Soniox — the shim must never forward a
+    # client's bearer token as the API key.
+    state["auth"] = request.headers.get("authorization")
     return {"id": "job_test"}
 
 
 @app.get("/v1/transcriptions/{job_id}")
 async def poll(job_id: str):
     state["polls"] += 1
+    if FAIL:
+        return {"status": "error", "error_message": "synthetic failure"}
     # Report progress twice so the polling loop is actually exercised.
     if state["polls"] <= 2:
         return {"status": "processing"}

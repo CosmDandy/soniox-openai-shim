@@ -12,6 +12,10 @@ services:
       # compose fails loudly rather than starting without it.
       SONIOX_API_KEY: ${SONIOX_API_KEY:?run make up - the key comes from secrets.sops.yaml}
 
+      # Shared secret required from callers. Unset is fine only while the port
+      # is bound to 127.0.0.1, as it is below; set it before exposing the shim.
+      # SHIM_AUTH_TOKEN: ${SHIM_AUTH_TOKEN:-}
+
       # Async batch model. Soniox rev these often; check soniox.com/docs/stt/models.
       # A real-time id (stt-rt-*) is translated to its async twin automatically.
       SONIOX_MODEL: stt-async-v5
@@ -45,9 +49,10 @@ services:
         WireGuard, Tailscale
 
       # Regional endpoint. Bare host is US; EU is https://api.eu.soniox.com.
+      # Keys are region-bound: a US key gets 401 from the EU endpoint.
       SONIOX_BASE_URL: https://api.soniox.com
 
-      # Jobs finish in ~2s, so poll tight - the request is blocked on it anyway.
+      # A job takes a couple of seconds; poll tight, the request waits anyway.
       SONIOX_POLL_INTERVAL: "0.1"
       SONIOX_POLL_TIMEOUT: "300"
 

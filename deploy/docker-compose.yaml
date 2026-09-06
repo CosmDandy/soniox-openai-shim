@@ -16,8 +16,10 @@ services:
       # Mandatory here. Generate with: openssl rand -base64 32
       SHIM_AUTH_TOKEN: ${SHIM_AUTH_TOKEN:?set it in .env}
 
-      # Pick the region closest to the server. Measured from Stockholm, TLS to
-      # api.eu.soniox.com takes 0.13s against 0.33s to the US endpoint.
+      # Pick the region closest to the server: measured from Stockholm, TLS to
+      # api.eu.soniox.com takes 0.13s against 0.33s to the US endpoint. Mind that
+      # keys are region-bound — a US key is rejected with 401 by the EU endpoint,
+      # so switch only together with a key issued in that region.
       SONIOX_BASE_URL: ${SONIOX_BASE_URL:-https://api.soniox.com}
 
       SONIOX_MODEL: stt-async-v5
@@ -60,9 +62,14 @@ services:
       traefik.http.routers.soniox-shim.tls.certresolver: letsencrypt
       traefik.http.services.soniox-shim.loadbalancer.server.port: "8756"
       # Dictation is bursty but low-rate; this only clips a runaway client.
-      traefik.http.routers.soniox-shim.middlewares: soniox-ratelimit
+      traefik.http.routers.soniox-shim.middlewares: soniox-ratelimit,soniox-bodylimit
       traefik.http.middlewares.soniox-ratelimit.ratelimit.average: "30"
       traefik.http.middlewares.soniox-ratelimit.ratelimit.burst: "10"
+      # The real ceiling: the shim only sees a body after it has been received,
+      # so an oversized upload must be refused here, at the edge. 64 MiB is
+      # roughly half an hour of the WAV a dictation client sends.
+      traefik.http.middlewares.soniox-bodylimit.buffering.maxRequestBodyBytes: "67108864"
+      traefik.http.middlewares.soniox-bodylimit.buffering.memRequestBodyBytes: "2097152"
 
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8756/health', timeout=3).status == 200 else 1)"]

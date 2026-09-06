@@ -26,7 +26,9 @@ key:  ## edit the encrypted key in $$EDITOR
 test:  ## end-to-end run against the mock, no Soniox key needed
 	./tests/e2e.sh
 
-bench:  ## compare transports on real audio: make bench AUDIO=/path/to/dir
+bench:  ## compare transports: make bench AUDIO=/dir (must contain sample.wav)
+	@test -n "$(AUDIO)" || { echo "set AUDIO=/path/to/dir containing sample.wav" >&2; exit 1; }
+	@test -f "$(AUDIO)/sample.wav" || { echo "no sample.wav in $(AUDIO)" >&2; exit 1; }
 	# The runtime image already carries httpx and websockets (via uvicorn[standard]),
 	# so the benchmark needs no image of its own.
 	docker build -q -t soniox-shim:local . >/dev/null

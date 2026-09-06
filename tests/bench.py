@@ -1,7 +1,7 @@
 """Time both Soniox transports on the same audio, phase by phase.
 
-Runs inside the shim container so it inherits SONIOX_API_KEY from the compose
-env file: no key ever has to be printed or passed on a command line.
+Runs inside the shim image, taking SONIOX_API_KEY from the environment that
+`sops exec-env` sets up: the key is never printed or typed on a command line.
 
     make bench AUDIO=/path/to/dir-with-sample.wav
 """
