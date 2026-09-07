@@ -60,6 +60,7 @@ Everything except the secret lives in `environment:` in `compose.yaml`; the key 
 | `SONIOX_POLL_TIMEOUT` | `300` | Ceiling on one dictation, seconds. |
 | `SONIOX_PRICE_PER_HOUR` | `0.10` | Price stamped on each entry when it is written; `/stats` only sums what was recorded. |
 | `SONIOX_USAGE_LOG` | `/data/usage.jsonl` | Where usage entries are appended. |
+| `SHIM_DAILY_LIMIT_MINUTES` | `0` | Ceiling on audio billed per UTC day; `0` disables it. Past the cap transcription answers 429 while `/stats` keeps working. This is the only measure that limits what a leaked token can cost you, rather than the odds of it leaking. |
 | `SHIM_MAX_UPLOAD_BYTES` | `67108864` | Bodies declaring more than this are refused with 413 before being read. A client that lies about `Content-Length` still gets through, so keep a limit on the reverse proxy — the deploy example sets one. |
 
 ### The term list matters
@@ -110,6 +111,11 @@ a healthcheck and a client's provider probe need them.
 
 The secret is never forwarded upstream: Soniox always sees the server's own key. The test suite
 asserts both halves of that, along with rejection of a wrong, absent or non-ASCII bearer.
+
+Every rejection is logged with the caller's address, taken from `X-Forwarded-For` — behind a
+reverse proxy the socket only ever shows the proxy, so without that header a burst of probes is
+indistinguishable from your own typo on a new device. Pair it with `SHIM_DAILY_LIMIT_MINUTES`:
+the log tells you something is wrong, the cap decides how much it can cost before you notice.
 
 ```bash
 openssl rand -base64 32
