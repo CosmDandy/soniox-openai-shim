@@ -201,6 +201,11 @@ for _ in $(seq 30); do
   sleep 1
 done
 
+# The cap must announce itself: an INFO line on a logger with no handler is
+# dropped silently, and then nothing tells you whether the cap is even on.
+docker logs "$CAPPED" 2>&1 | grep -q 'daily cap' \
+  || fail "the cap did not announce itself at startup"
+
 # The mock bills 3000 ms per dictation, and the cap is 0.05 min = 3000 ms.
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
   "http://127.0.0.1:$CAPPED_PORT/v1/audio/transcriptions" -F "file=@$SAMPLE")
