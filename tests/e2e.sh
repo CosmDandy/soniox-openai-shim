@@ -14,7 +14,8 @@ HDR_NAME="Authoriz""ation"
 
 drop_containers() {
   docker rm -f "$MOCK" "$SHIM" soniox-openai-shim-e2e-gated \
-    soniox-openai-shim-e2e-failmock soniox-openai-shim-e2e-failshim >/dev/null 2>&1 || true
+    soniox-openai-shim-e2e-failmock soniox-openai-shim-e2e-failshim \
+    soniox-openai-shim-e2e-capped >/dev/null 2>&1 || true
   docker network rm "$NET" >/dev/null 2>&1 || true
 }
 cleanup() {
@@ -92,6 +93,7 @@ TOKEN=$(openssl rand -hex 16)
 WRONG=$(openssl rand -hex 16)
 GOOD_HDR="$HDR_NAME: Bearer $TOKEN"
 BAD_HDR="$HDR_NAME: Bearer $WRONG"
+
 docker rm -f "$GATED" >/dev/null 2>&1 || true
 docker run -d --name "$GATED" --network "$NET" -p "127.0.0.1:$GATED_PORT:8756" \
   -e SONIOX_API_KEY=test-key \
@@ -141,6 +143,14 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
   "http://127.0.0.1:$GATED_PORT/v1/audio/transcriptions" -F "file=@$SAMPLE")
 [ "$code" = "401" ] || fail "gated mode accepted a missing token: $code"
 
+BAD_HDR="$HDR_NAME: Bearer $WRONG"
+# A rejected caller must be identifiable: behind a proxy that means the
+# forwarded header, since the socket only ever shows the proxy.
+curl -s -o /dev/null -X POST "http://127.0.0.1:$GATED_PORT/v1/audio/transcriptions" \
+  -H "$BAD_HDR" -H "X-Forwarded-For: 203.0.113.7" -F "file=@$SAMPLE" || true
+docker logs "$GATED" 2>&1 | grep -q '203.0.113.7' \
+  || fail "rejection was not logged with the forwarded caller address"
+
 docker rm -f "$GATED" >/dev/null 2>&1 || true
 
 # A failed job still has to be cleaned up: background tasks are dropped when the
@@ -180,6 +190,33 @@ echo "$failstate" | grep -q 'file:file_test' || fail "file left behind after fai
 
 docker rm -f "$FAILMOCK" "$FAILSHIM" >/dev/null 2>&1 || true
 
+# A leaked token is worth at most one day's cap, so the cap has to actually bite.
+CAPPED=soniox-openai-shim-e2e-capped
+CAPPED_PORT=8892
+docker run -d --name "$CAPPED" --network "$NET" -p "127.0.0.1:$CAPPED_PORT:8756" \
+  -e SONIOX_API_KEY=test-key -e "SONIOX_BASE_URL=http://$MOCK:8756" \
+  -e SHIM_DAILY_LIMIT_MINUTES=0.05 "$IMAGE" >/dev/null
+for _ in $(seq 30); do
+  curl -sf "http://127.0.0.1:$CAPPED_PORT/health" >/dev/null && break
+  sleep 1
+done
+
+# The mock bills 3000 ms per dictation, and the cap is 0.05 min = 3000 ms.
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+  "http://127.0.0.1:$CAPPED_PORT/v1/audio/transcriptions" -F "file=@$SAMPLE")
+[ "$code" = "200" ] || fail "first dictation under the cap returned $code"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+  "http://127.0.0.1:$CAPPED_PORT/v1/audio/transcriptions" -F "file=@$SAMPLE")
+[ "$code" = "429" ] || fail "dictation over the daily cap returned $code, want 429"
+
+# Hitting the cap must not blind you to your own usage.
+code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$CAPPED_PORT/stats")
+[ "$code" = "200" ] || fail "/stats broke once the cap was reached: $code"
+
+docker rm -f "$CAPPED" >/dev/null 2>&1 || true
+
+
 stats=$(curl -sf "http://127.0.0.1:$SHIM_PORT/stats")
 echo "$stats" | grep -q '"dictations":2' || fail "usage not accounted: $stats"
 # Two dictations of 3000 ms each, as reported by audio_duration_ms. The mock's
@@ -190,4 +227,5 @@ echo "PASS: transcription, text format, empty-body guard, config passthrough,"
 echo "      deferred cleanup, usage accounting, token gate (right/wrong/absent),"
 echo "      server key never replaced by the caller's, cleanup after a failed job,"
 echo "      upload ceiling refused before the body is read, non-ASCII token,"
-echo "      /stats behind the gate while probes stay open"
+echo "      /stats behind the gate while probes stay open, daily cap enforced"
+echo "      with /stats still readable, rejections logged with the caller address"

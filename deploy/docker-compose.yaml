@@ -24,6 +24,10 @@ services:
       # so switch only together with a key issued in that region.
       SONIOX_BASE_URL: ${SONIOX_BASE_URL:-https://api.soniox.com}
 
+      # Ceiling per UTC day. Pick roughly twice a heavy day of your own: enough
+      # never to hit it yourself, low enough that a leaked token is cheap.
+      SHIM_DAILY_LIMIT_MINUTES: ${SHIM_DAILY_LIMIT_MINUTES:-240}
+
       SONIOX_MODEL: stt-async-v5
       SONIOX_LANGUAGE_HINTS: ru,en
       SONIOX_CONTEXT_DOMAIN: >-

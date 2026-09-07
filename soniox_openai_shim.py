@@ -28,6 +28,7 @@ Run (bare):
 from __future__ import annotations
 
 import asyncio
+import datetime
 import json
 import logging
 import os
@@ -102,6 +103,17 @@ MAX_UPLOAD_BYTES = int(os.environ.get("SHIM_MAX_UPLOAD_BYTES", str(64 * 1024 * 1
 # service is reachable from anywhere else — a phone, a LAN, an ingress.
 AUTH_TOKEN = os.environ.get("SHIM_AUTH_TOKEN", "").strip()
 
+# Ceiling on audio billed per UTC day. A leaked token is worth at most this much
+# per day, which is the only thing that limits the damage rather than the odds.
+# 0 disables the cap.
+DAILY_LIMIT_MINUTES = float(os.environ.get("SHIM_DAILY_LIMIT_MINUTES", "0"))
+
+log = logging.getLogger("shim")
+
+# Today's tally, kept in memory so a dictation never waits on a file scan.
+_day: str = ""
+_day_ms: int = 0
+
 # One pooled client for the process: a cold TLS handshake to Soniox costs ~0.4s,
 # which is a quarter of a dictation's total latency if paid on every request.
 _client: httpx.AsyncClient | None = None
@@ -121,6 +133,10 @@ async def lifespan(app: FastAPI):
     except httpx.HTTPError:
         pass
 
+    _load_today()
+    if DAILY_LIMIT_MINUTES > 0:
+        log.info("daily cap: %.1f min of audio (%.0f min already used today)",
+                 DAILY_LIMIT_MINUTES, _day_ms / 60_000)
     if not AUTH_TOKEN:
         logging.getLogger("uvicorn.error").warning(
             "SHIM_AUTH_TOKEN is not set: every caller who can reach this port is "
@@ -147,7 +163,23 @@ async def gate(request: Request, call_next):
     path = request.url.path
 
     if AUTH_TOKEN and path not in PUBLIC_PATHS and not _token_ok(request):
+        # The only trace a probe or a leaked token leaves. Without the caller
+        # and the agent, a spike of 401s is indistinguishable from your own typo.
+        log.warning(
+            "rejected %s %s from %s (%s)",
+            request.method, path, _caller(request),
+            request.headers.get("user-agent", "no agent")[:120],
+        )
         return JSONResponse({"detail": "Invalid token"}, status_code=401)
+
+    if path == "/v1/audio/transcriptions" and _over_daily_cap():
+        log.warning(
+            "daily cap of %.1f min reached; refusing %s", DAILY_LIMIT_MINUTES, _caller(request)
+        )
+        return JSONResponse(
+            {"detail": f"Daily audio cap of {DAILY_LIMIT_MINUTES} minutes reached"},
+            status_code=429,
+        )
 
     declared = request.headers.get("content-length")
     if declared and declared.isdigit() and int(declared) > MAX_UPLOAD_BYTES:
@@ -161,6 +193,49 @@ async def gate(request: Request, call_next):
 def _presented(request: Request) -> str:
     header = request.headers.get("authorization", "")
     return header[7:].strip() if header.lower().startswith("bearer ") else ""
+
+
+def _caller(request: Request) -> str:
+    """Who is on the other side. Behind Traefik the socket shows the proxy, so
+    the forwarded headers are the only way to tell callers apart."""
+    fwd = request.headers.get("x-forwarded-for", "")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.headers.get("x-real-ip") or (request.client.host if request.client else "?")
+
+
+def _today() -> str:
+    return datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d")
+
+
+def _load_today() -> None:
+    """Rebuild today's tally from the log, so a restart does not reset the cap."""
+    global _day, _day_ms
+    _day, _day_ms = _today(), 0
+    if not USAGE_LOG.exists():
+        return
+    start = datetime.datetime.strptime(_day, "%Y-%m-%d").replace(tzinfo=datetime.UTC).timestamp()
+    try:
+        for line in USAGE_LOG.read_text().splitlines():
+            if not line.strip():
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if entry.get("ts", 0) >= start:
+                _day_ms += int(entry.get("audio_ms") or 0)
+    except OSError:
+        pass
+
+
+def _over_daily_cap() -> bool:
+    global _day
+    if DAILY_LIMIT_MINUTES <= 0:
+        return False
+    if _day != _today():
+        _load_today()
+    return _day_ms >= DAILY_LIMIT_MINUTES * 60_000
 
 
 def _token_ok(request: Request) -> bool:
@@ -286,6 +361,11 @@ def _record_usage(audio_ms: int, latency_ms: int) -> None:
         "latency_ms": latency_ms,
         "cost_usd": round(audio_ms / 3_600_000 * PRICE_PER_HOUR, 6),
     }
+    global _day, _day_ms
+    if _day != _today():
+        _load_today()
+    _day_ms += audio_ms
+
     try:
         USAGE_LOG.parent.mkdir(parents=True, exist_ok=True)
         with USAGE_LOG.open("a") as handle:
