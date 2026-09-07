@@ -1,5 +1,10 @@
 # soniox-openai-shim
 
+[![build](https://github.com/CosmDandy/soniox-openai-shim/actions/workflows/image.yaml/badge.svg)](https://github.com/CosmDandy/soniox-openai-shim/actions/workflows/image.yaml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/CosmDandy/soniox-openai-shim/badge)](https://scorecard.dev/viewer/?uri=github.com/CosmDandy/soniox-openai-shim)
+[![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev)
+[![ghcr](https://img.shields.io/badge/ghcr.io-soniox--openai--shim-2496ed?logo=docker&logoColor=white)](https://github.com/CosmDandy/soniox-openai-shim/pkgs/container/soniox-openai-shim)
+[![license](https://img.shields.io/github/license/CosmDandy/soniox-openai-shim)](LICENSE)
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/CosmDandy/soniox-openai-shim)
 
 An OpenAI-compatible `/v1/audio/transcriptions` endpoint backed by [Soniox](https://soniox.com).
