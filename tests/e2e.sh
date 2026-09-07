@@ -196,15 +196,22 @@ CAPPED_PORT=8892
 docker run -d --name "$CAPPED" --network "$NET" -p "127.0.0.1:$CAPPED_PORT:8756" \
   -e SONIOX_API_KEY=test-key -e "SONIOX_BASE_URL=http://$MOCK:8756" \
   -e SHIM_DAILY_LIMIT_MINUTES=0.05 "$IMAGE" >/dev/null
-for _ in $(seq 30); do
+for _ in $(seq 60); do
   curl -sf "http://127.0.0.1:$CAPPED_PORT/health" >/dev/null && break
   sleep 1
 done
+curl -sf "http://127.0.0.1:$CAPPED_PORT/health" >/dev/null \
+  || fail "capped shim never came up (logs: $(docker logs "$CAPPED" 2>&1 | tail -3))"
 
 # The cap must announce itself: an INFO line on a logger with no handler is
 # dropped silently, and then nothing tells you whether the cap is even on.
+# Waited for, not asserted instantly: the runner writes the log a beat later.
+for _ in $(seq 20); do
+  docker logs "$CAPPED" 2>&1 | grep -q 'daily cap' && break
+  sleep 0.5
+done
 docker logs "$CAPPED" 2>&1 | grep -q 'daily cap' \
-  || fail "the cap did not announce itself at startup"
+  || fail "the cap did not announce itself (logs: $(docker logs "$CAPPED" 2>&1 | tail -5))"
 
 # The mock bills 3000 ms per dictation, and the cap is 0.05 min = 3000 ms.
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
