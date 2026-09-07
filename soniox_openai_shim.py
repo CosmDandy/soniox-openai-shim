@@ -108,7 +108,10 @@ AUTH_TOKEN = os.environ.get("SHIM_AUTH_TOKEN", "").strip()
 # 0 disables the cap.
 DAILY_LIMIT_MINUTES = float(os.environ.get("SHIM_DAILY_LIMIT_MINUTES", "0"))
 
-log = logging.getLogger("shim")
+# uvicorn's logger, not our own: it already has a handler and an INFO level, so
+# messages land in the container log in the same format as everything else. A
+# fresh logger would silently drop anything below WARNING.
+log = logging.getLogger("uvicorn.error")
 
 # Today's tally, kept in memory so a dictation never waits on a file scan.
 _day: str = ""
@@ -138,7 +141,7 @@ async def lifespan(app: FastAPI):
         log.info("daily cap: %.1f min of audio (%.0f min already used today)",
                  DAILY_LIMIT_MINUTES, _day_ms / 60_000)
     if not AUTH_TOKEN:
-        logging.getLogger("uvicorn.error").warning(
+        log.warning(
             "SHIM_AUTH_TOKEN is not set: every caller who can reach this port is "
             "served on your Soniox key. Safe on 127.0.0.1, not anywhere else."
         )
