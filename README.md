@@ -1,11 +1,8 @@
 # soniox-openai-shim
 
-[![build](https://github.com/CosmDandy/soniox-openai-shim/actions/workflows/image.yaml/badge.svg)](https://github.com/CosmDandy/soniox-openai-shim/actions/workflows/image.yaml)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/CosmDandy/soniox-openai-shim/badge)](https://scorecard.dev/viewer/?uri=github.com/CosmDandy/soniox-openai-shim)
-[![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev)
-[![ghcr](https://img.shields.io/badge/ghcr.io-soniox--openai--shim-2496ed?logo=docker&logoColor=white)](https://github.com/CosmDandy/soniox-openai-shim/pkgs/container/soniox-openai-shim)
-[![license](https://img.shields.io/github/license/CosmDandy/soniox-openai-shim)](LICENSE)
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/CosmDandy/soniox-openai-shim)
+[![Open in GitHub Codespaces][codespaces]](https://codespaces.new/CosmDandy/soniox-openai-shim)
+
+[![build][build]](https://github.com/CosmDandy/soniox-openai-shim/actions/workflows/image.yaml) [![scorecard][scorecard]](https://scorecard.dev/viewer/?uri=github.com/CosmDandy/soniox-openai-shim) [![SLSA][SLSA]](https://slsa.dev) [![ghcr.io][ghcr.io]](https://github.com/CosmDandy/soniox-openai-shim/pkgs/container/soniox-openai-shim) [![license][license]](LICENSE)
 
 An OpenAI-compatible `/v1/audio/transcriptions` endpoint backed by [Soniox](https://soniox.com).
 
@@ -164,3 +161,10 @@ there is reason to generate one.
 ## Licence
 
 MIT.
+
+[codespaces]: https://github.com/codespaces/badge.svg
+[build]: https://img.shields.io/github/actions/workflow/status/CosmDandy/soniox-openai-shim/image.yaml?branch=master&style=flat&label=build&labelColor=21262d&logo=githubactions&logoColor=8b949e
+[scorecard]: https://img.shields.io/ossf-scorecard/github.com/CosmDandy/soniox-openai-shim?style=flat&label=scorecard&labelColor=21262d
+[SLSA]: https://img.shields.io/badge/SLSA-3-7828dc?style=flat&labelColor=21262d&logo=data%3Aimage%2Fpng%3Bbase64%2CiVBORw0KGgoAAAANSUhEUgAAAA4AAAAOCAMAAAAolt3jAAAABGdBTUEAALGPC%2FxhBQAAACBjSFJNAAB6JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAAF3CculE8AAABMlBMVEXvMQDvMADwMQDwMADwMADvMADvMADwMADwMQDvMQDvMQDwMADwMADvMADwMADwMADwMQDvMQDvMQDwMQDvMQDwMQDwMADwMADwMQDwMADwMADvMADvMQDvMQDwMADwMQDwMADvMQDwMADwMQDwMADwMADwMADwMADwMADwMADvMQDvMQDwMADwMQDwMADvMQDvMQDwMADvMQDvMQDwMADwMQDwMQDwMQDvMQDwMADvMADwMADwMQDvMQDwMADwMQDwMQDwMQDwMQDvMQDvMQDvMADwMADvMADvMADvMADwMQDwMQDvMADvMQDvMQDvMADvMADvMQDwMQDvMQDvMADvMADvMADvMQDwMQDvMQDvMQDvMADvMADwMADvMQDvMQDvMQDvMADwMADwMQDwMAAAAAA%2FHoSwAAAAY3RSTlMpsvneQlQrU%2FLQSWzvM5DzmzeF9Pi%2BN6vvrk9HuP3asTaPgkVFmO3rUrMjqvL6d0LLTVjI%2FPuMQNSGOWa%2F6YU8zNuDLihJ0e6aMGzl8s2IT7b6lIFkRj1mtvQ0eJW95rG0%2BSid59x%2FAAAAAWJLR0Rltd2InwAAAAlwSFlzAAAOwwAADsMBx2%2BoZAAAAAd0SU1FB%2BYHGg0tGLrTaD4AAACqSURBVAjXY2BgZEqGAGYWVjYGdg4oj5OLm4eRgZcvBcThFxAUEk4WYRAVE09OlpCUkpaRTU6WY0iWV1BUUlZRVQMqUddgSE7W1NLS1gFp0NXTB3KTDQyNjE2Sk03NzC1A3GR1SytrG1s7e4dkBogtjk7OLq5uyTCuu4enl3cyhOvj66fvHxAIEmYICg4JDQuPiAQrEmGIio6JjZOFOjSegSHBBMpOToxPAgCJfDZC%2Fm2KHgAAACV0RVh0ZGF0ZTpjcmVhdGUAMjAyMi0wNy0yNlQxMzo0NToyNCswMDowMC8AywoAAAAldEVYdGRhdGU6bW9kaWZ5ADIwMjItMDctMjZUMTM6NDU6MjQrMDA6MDBeXXO2AAAAGXRFWHRTb2Z0d2FyZQB3d3cuaW5rc2NhcGUub3Jnm%2B48GgAAAABJRU5ErkJggg%3D%3D
+[ghcr.io]: https://img.shields.io/badge/ghcr.io-soniox--openai--shim-00a8c8?style=flat&labelColor=21262d&logo=docker&logoColor=8b949e
+[license]: https://img.shields.io/github/license/CosmDandy/soniox-openai-shim?style=flat&label=license&labelColor=21262d&color=484f58&logo=opensourceinitiative&logoColor=8b949e
