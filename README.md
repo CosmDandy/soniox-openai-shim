@@ -53,25 +53,25 @@ Everything except the secret lives in `environment:` in `compose.yaml`; the key 
 | `SHIM_AUTH_TOKEN` | unset | Shared secret required from callers. See *Exposing it* below. |
 | `SONIOX_MODEL` | `stt-async-v5` | Soniox rename models often; a real-time id is translated to its async twin. |
 | `SONIOX_LANGUAGE_HINTS` | `ru,en` | Language hints — the lever for code-switching accuracy. |
-| `SONIOX_CONTEXT_DOMAIN` | unset | Subject of the speech, sets the frame. |
-| `SONIOX_CONTEXT_TERMS` | unset | Comma-separated vocabulary. The single biggest accuracy lever. |
 | `SONIOX_BASE_URL` | `https://api.soniox.com` | Regional endpoint; EU is `https://api.eu.soniox.com`. Keys are region-bound: a US key gets 401 from the EU endpoint, so changing region means issuing a key in that region's console. |
 | `SONIOX_POLL_INTERVAL` | `0.1` | Job polling step, seconds. |
 | `SONIOX_POLL_TIMEOUT` | `300` | Ceiling on one dictation, seconds. |
-| `SONIOX_PRICE_PER_HOUR` | `0.10` | Price stamped on each entry when it is written; `/stats` only sums what was recorded. |
 | `SONIOX_USAGE_LOG` | `/data/usage.jsonl` | Where usage entries are appended. |
 | `SHIM_DAILY_LIMIT_MINUTES` | `0` | Ceiling on audio billed per UTC day; `0` disables it. Past the cap transcription answers 429 while `/stats` keeps working. This is the only measure that limits what a leaked token can cost you, rather than the odds of it leaking. |
 | `SHIM_MAX_UPLOAD_BYTES` | `67108864` | Bodies declaring more than this are refused with 413 before being read. A client that lies about `Content-Length` still gets through, so keep a limit on the reverse proxy — the deploy example sets one. |
 
-### The term list matters
+### No term list
 
-Soniox takes `context` as a structured object: `general` frames the subject, `terms` pins the
-spelling and casing of proper nouns. The ceiling is 8000 tokens (~10000 characters), so there
-is room for a large vocabulary.
+Soniox accepts a `context` object that pins the spelling of proper nouns, and the shim
+deliberately does not send one. It is billed as input text tokens on *every* request, at
+$3.50 per million against $1.50 for audio: a 1100-character vocabulary came to 524 tokens a
+request, which was 72% of a month's bill — more than the audio and the transcript combined.
 
-The difference is measurable. On the same recording, terms present in the list came back
-correct, while missing ones turned into "Victory Matrix" for VictoriaMetrics and "CIVITFS"
-for SeaweedFS. Fill it with the words you actually say.
+What it bought was not measurable. One user's history holds 7124 dictations transcribed by
+Soniox with no vocabulary and 382 through this shim with a 76-term one; the same technical
+names appear 5.8 times per 10 000 characters in the first and 5.9 in the second. If a word you
+say constantly does come back wrong, `_create_job` is four lines from sending a `context`
+again — but price it first.
 
 ## Why async, and not the real-time WebSocket
 
@@ -127,13 +127,17 @@ the token required rather than optional.
 
 ## Usage and cost
 
-`GET /stats` reports dictations, minutes of audio, estimated cost and median latency, persisted
-on the `usage` volume.
+`GET /stats` reports dictations, minutes of audio and median latency from the log on the
+`usage` volume, and the money from Soniox's own `/v1/usage/summary` for the calendar month so
+far — cost to date, cost today, and what that works out to per audio-hour.
 
-At $0.10 per audio-hour, a heavy dictation habit is cheap: six months of one user's history —
-10 850 dictations, 77.5 hours — works out to $7.75, about $1.30 a month. That history is
-uneven: a median day is 23 minutes, while the busiest single day was 213 minutes and would
-have cost 36 cents.
+The money is not computed here on purpose. Soniox bills per token, at rates that differ by
+model and by what the token is, so a local estimate from an average price per hour is a guess;
+the one this endpoint used to print was low by a factor of four.
+
+The bill is small either way. Dictation with no term list runs about $0.11 per audio-hour, so
+six months of one user's history — 10 850 dictations, 77.5 hours — comes to roughly $8.50. That
+history is uneven: a median day is 23 minutes, the busiest single day 213 minutes.
 
 ## Tests
 

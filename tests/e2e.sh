@@ -41,8 +41,6 @@ docker run -d --name "$MOCK" --network "$NET" -p "127.0.0.1:$MOCK_PORT:8756" \
 docker run -d --name "$SHIM" --network "$NET" -p "127.0.0.1:$SHIM_PORT:8756" \
   -e SONIOX_API_KEY=test-key \
   -e "SONIOX_BASE_URL=http://$MOCK:8756" \
-  -e "SONIOX_CONTEXT_TERMS=Nomad, Terraform" \
-  -e "SONIOX_CONTEXT_DOMAIN=infrastructure" \
   -e SONIOX_LANGUAGE_HINTS=ru,en \
   "$IMAGE" >/dev/null
 
@@ -77,10 +75,8 @@ state=$(curl -sf "http://127.0.0.1:$MOCK_PORT/_state")
 echo "$state" | grep -q '"uploaded_bytes":16000' || fail "audio did not arrive intact: $state"
 echo "$state" | grep -q '"model":"stt-async-v5"' || fail "model not mapped: $state"
 echo "$state" | grep -q '"language_hints":\["ru","en"\]' || fail "language hints missing: $state"
-# Context must be the structured object Soniox documents, not a blob of text.
-echo "$state" | grep -q '"terms":\["Nomad","Terraform"\]' || fail "context terms missing: $state"
-echo "$state" | grep -q '"general":\[{"key":"domain","value":"infrastructure"}\]' \
-  || fail "context domain missing: $state"
+# No vocabulary is sent: Soniox rebills a term list on every single request.
+if echo "$state" | grep -q '"context"'; then fail "context sent despite being dropped: $state"; fi
 echo "$state" | grep -q 'job:job_test' || fail "job not deleted: $state"
 echo "$state" | grep -q 'file:file_test' || fail "file not deleted: $state"
 
@@ -234,10 +230,17 @@ echo "$stats" | grep -q '"dictations":2' || fail "usage not accounted: $stats"
 # Two dictations of 3000 ms each, as reported by audio_duration_ms. The mock's
 # tokens end at 2400 ms, so billing the speech instead of the audio fails here.
 echo "$stats" | grep -q '"audio_minutes":0.1' || fail "audio duration not tracked: $stats"
+# Money comes from Soniox's own usage summary, never from a local average price.
+echo "$stats" | grep -q '"cost_usd":0.44' || fail "billing not read from the API: $stats"
+echo "$stats" | grep -q '"today_usd":0.15' || fail "today not picked off the day array: $stats"
+# 0.44 over the hour of audio the summary reports.
+echo "$stats" | grep -q '"usd_per_audio_hour":0.44' || fail "rate not derived: $stats"
+if echo "$stats" | grep -q 'price_per_hour'; then fail "average price still reported: $stats"; fi
 
 echo "PASS: transcription, text format, empty-body guard, config passthrough,"
 echo "      deferred cleanup, usage accounting, token gate (right/wrong/absent),"
 echo "      server key never replaced by the caller's, cleanup after a failed job,"
 echo "      upload ceiling refused before the body is read, non-ASCII token,"
 echo "      /stats behind the gate while probes stay open, daily cap enforced"
-echo "      with /stats still readable, rejections logged with the caller address"
+echo "      with /stats still readable, rejections logged with the caller address,"
+echo "      no context sent upstream, cost read from Soniox's usage summary"

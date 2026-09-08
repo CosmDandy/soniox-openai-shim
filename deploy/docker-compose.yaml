@@ -30,28 +30,8 @@ services:
 
       SONIOX_MODEL: stt-async-v5
       SONIOX_LANGUAGE_HINTS: ru,en
-      SONIOX_CONTEXT_DOMAIN: >-
-        DevOps and homelab infrastructure: Kubernetes, Proxmox, GitOps,
-        networking and server administration. Speech is Russian with English
-        technical terms mixed in.
-      SONIOX_CONTEXT_TERMS: >-
-        Kubernetes, k8s, Talos, Proxmox, Cilium, Longhorn, MetalLB, ArgoCD,
-        GitOps, Helm, Traefik, cert-manager, external-dns, Sealed Secrets,
-        External Secrets, CloudNativePG, Velero, Renovate, metrics-server,
-        kube-prometheus-stack, Prometheus, Grafana, Grafana Alloy, Loki,
-        GitLab, GitLab CI, GitLab Runner, Nexus, PowerDNS, SeaweedFS, MinIO,
-        OpenSearch, VictoriaMetrics, Vector, Gatus, node-exporter,
-        postgres-exporter, PostgreSQL, Redis, Odoo, Nextcloud, Paperless-ngx,
-        Photoprism, Jellyfin, Atuin, Home Assistant, Homepage, Authentik,
-        Terraform, Ansible, Nomad, Docker, Docker Compose, OrbStack, Colima,
-        Lima, UTM, Devpod, sops, age, Nix, home-manager, tmux, zsh,
-        Claude Code, IPMI, BMC, Serial-over-LAN, PXE, TFTP, DHCP, VLAN,
-        nftables, tcpdump, MTU, kubectl, Ingress, Gateway API, PVC,
-        StorageClass, DaemonSet, StatefulSet, namespace, systemd, journalctl,
-        WireGuard, Tailscale
       SONIOX_POLL_INTERVAL: "0.1"
       SONIOX_POLL_TIMEOUT: "300"
-      SONIOX_PRICE_PER_HOUR: "0.10"
 
     # No published ports: the only way in is through traefik on the edge network.
     networks:

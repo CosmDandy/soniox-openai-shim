@@ -4,6 +4,7 @@ MOCK_FAIL=1 makes every job fail, which is how the cleanup-on-error path is
 tested: the shim must still delete the file and the job.
 """
 
+import datetime
 import os
 
 from fastapi import FastAPI, Request, UploadFile, File
@@ -81,3 +82,22 @@ async def dump():
 @app.get("/v1/models")
 async def models():
     return {"models": []}
+
+
+@app.get("/v1/usage/summary")
+async def usage(start_time: str, end_time: str):
+    """Costs come back as decimal strings, one array entry per day."""
+    state["usage_range"] = [start_time, end_time]
+    today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+    return {
+        "total": {
+            "days": ["2026-01-01", today],
+            "cost_usd": ["0.2900000000", "0.1500000000"],
+            "total_cost_usd": "0.4400000000",
+            "total_num_requests": 7,
+            "total_input_audio_duration_ms": 3600000,
+            "total_input_text_tokens": 0,
+            "total_output_text_tokens": 991,
+        },
+        "models": [],
+    }
