@@ -65,31 +65,14 @@ LANGUAGE_HINTS = [
     if lang.strip()
 ]
 
-# Domain vocabulary. Soniox takes a structured object, not a blob of text:
-# `terms` pins spelling and casing of proper nouns, `general` sets the subject.
-# Ceiling is 8000 tokens (~10000 chars) for the whole object.
-CONTEXT_TERMS = [
-    term.strip()
-    for term in os.environ.get("SONIOX_CONTEXT_TERMS", "").split(",")
-    if term.strip()
-]
-CONTEXT_DOMAIN = os.environ.get("SONIOX_CONTEXT_DOMAIN", "").strip()
-
-
-def _context() -> dict[str, Any] | None:
-    context: dict[str, Any] = {}
-    if CONTEXT_DOMAIN:
-        context["general"] = [{"key": "domain", "value": CONTEXT_DOMAIN}]
-    if CONTEXT_TERMS:
-        context["terms"] = CONTEXT_TERMS
-    return context or None
+# NOTE: no `context` is sent. Soniox bills its terms as input text tokens on
+# every single request, which came to 72% of a month's bill here, and a term
+# list measured against dictations transcribed without one showed no difference
+# in how the same proper nouns came out.
 
 # Jobs finish in ~1s; poll tight, the request is blocked on this either way.
 POLL_INTERVAL = float(os.environ.get("SONIOX_POLL_INTERVAL", "0.1"))
 POLL_TIMEOUT = float(os.environ.get("SONIOX_POLL_TIMEOUT", "300"))
-
-# Async batch price per audio hour, per soniox.com/pricing. Only used by /stats.
-PRICE_PER_HOUR = float(os.environ.get("SONIOX_PRICE_PER_HOUR", "0.10"))
 
 USAGE_LOG = Path(os.environ.get("SONIOX_USAGE_LOG", "/data/usage.jsonl"))
 
@@ -290,9 +273,6 @@ async def _create_job(auth: dict[str, str], file_id: str, model: str, language: 
     hints = [language] if language else LANGUAGE_HINTS
     if hints:
         payload["language_hints"] = hints
-    context = _context()
-    if context:
-        payload["context"] = context
 
     resp = await _client.post("/v1/transcriptions", headers=auth, json=payload)
     resp.raise_for_status()
@@ -362,7 +342,6 @@ def _record_usage(audio_ms: int, latency_ms: int) -> None:
         "ts": time.time(),
         "audio_ms": audio_ms,
         "latency_ms": latency_ms,
-        "cost_usd": round(audio_ms / 3_600_000 * PRICE_PER_HOUR, 6),
     }
     global _day, _day_ms
     if _day != _today():
@@ -392,12 +371,53 @@ async def models() -> dict[str, Any]:
     }
 
 
+async def _billing(auth: dict[str, str]) -> dict[str, Any]:
+    """This calendar month as Soniox has actually billed it.
+
+    Soniox charges per token, at a rate that differs by model and by what the
+    token is (audio in, text in, text out), so any figure derived here from an
+    average price per hour is a guess -- the one this endpoint used to return
+    was low by a factor of four. These are their numbers, and they cover the
+    whole account, not only what came through the shim."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    stamp = "%Y-%m-%dT%H:%M:%SZ"
+
+    resp = await _client.get(
+        "/v1/usage/summary",
+        headers=auth,
+        params={"start_time": start.strftime(stamp), "end_time": now.strftime(stamp)},
+        timeout=15.0,
+    )
+    resp.raise_for_status()
+    total = _json(resp).get("total") or {}
+
+    # Costs arrive as decimal strings, one entry per day alongside `days`.
+    days = total.get("days") or []
+    per_day = total.get("cost_usd") or []
+    today = now.strftime("%Y-%m-%d")
+    today_usd = float(per_day[-1]) if days and per_day and days[-1] == today else 0.0
+
+    cost = float(total.get("total_cost_usd") or 0)
+    audio_ms = int(total.get("total_input_audio_duration_ms") or 0)
+
+    return {
+        "since": start.strftime("%Y-%m-%d"),
+        "cost_usd": round(cost, 4),
+        "today_usd": round(today_usd, 4),
+        "requests": total.get("total_num_requests", 0),
+        "audio_minutes": round(audio_ms / 60_000, 2),
+        "input_text_tokens": total.get("total_input_text_tokens", 0),
+        "output_text_tokens": total.get("total_output_text_tokens", 0),
+        "usd_per_audio_hour": round(cost / (audio_ms / 3_600_000), 4) if audio_ms else None,
+    }
+
+
 @app.get("/stats")
-async def stats() -> dict[str, Any]:
-    """Running total of what has been dictated, and what it costs."""
+async def stats(request: Request) -> dict[str, Any]:
+    """What this shim has transcribed, and what Soniox billed for it."""
     count = 0
     audio_ms = 0
-    cost = 0.0
     latencies: list[int] = []
 
     if USAGE_LOG.exists():
@@ -411,15 +431,19 @@ async def stats() -> dict[str, Any]:
                 continue
             count += 1
             audio_ms += entry["audio_ms"]
-            cost += entry["cost_usd"]
             latencies.append(entry["latency_ms"])
+
+    try:
+        billing = await _billing({"Authorization": f"Bearer {_resolve_key(request)}"})
+    except Exception as exc:
+        # Billing is Soniox's to serve; the shim's own tallies still stand.
+        billing = {"error": f"{type(exc).__name__}: {exc}"[:200]}
 
     return {
         "dictations": count,
         "audio_minutes": round(audio_ms / 60_000, 2),
-        "cost_usd": round(cost, 4),
         "median_latency_ms": round(statistics.median(latencies)) if latencies else None,
-        "price_per_hour_usd": PRICE_PER_HOUR,
+        "billing": billing,
     }
 
 
