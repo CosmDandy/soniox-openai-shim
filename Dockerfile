@@ -6,8 +6,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# requirements.txt is the full tree locked with hashes (pip-compile from
+# requirements.in): an unpinned transitive dependency is resolved afresh on
+# every build, which is how 0.3.0 shipped a certifi with revoked emSign roots.
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 
 COPY soniox_openai_shim.py ./
 
