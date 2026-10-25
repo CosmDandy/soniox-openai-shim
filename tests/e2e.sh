@@ -175,6 +175,9 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
   "http://127.0.0.1:$FAILSHIM_PORT/v1/audio/transcriptions" -F "file=@$small")
 rm -f "$small"
 [ "$code" = "502" ] || fail "failed job returned $code, want 502"
+# The server side has to see the failure too, not only the client.
+docker logs "$FAILSHIM" 2>&1 | grep -q 'synthetic failure' \
+  || fail "failed job left no trace in the log"
 
 for _ in $(seq 20); do
   curl -sf "http://127.0.0.1:$FAILMOCK_PORT/_state" | grep -q 'file:file_test' && break

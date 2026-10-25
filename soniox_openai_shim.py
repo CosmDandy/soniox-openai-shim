@@ -479,15 +479,21 @@ async def transcriptions(
     except httpx.HTTPStatusError as exc:
         await _cleanup(auth, job_id, file_id)
         detail = exc.response.text[:500]
+        # Otherwise only the client ever sees it: a revoked key or an exhausted
+        # balance would leave nothing in the log but the access line's status.
+        log.warning("Soniox %s on %s: %s", exc.response.status_code,
+                    exc.request.url.path, detail[:200])
         raise HTTPException(exc.response.status_code, f"Soniox API error: {detail}") from exc
     except httpx.HTTPError as exc:
         # Timeouts, DNS failures, connection resets: no response to quote.
         await _cleanup(auth, job_id, file_id)
+        log.warning("Soniox unreachable: %s", type(exc).__name__)
         raise HTTPException(502, f"Soniox unreachable: {type(exc).__name__}") from exc
-    except Exception:
+    except Exception as exc:
         # Job failures and the poll timeout raise HTTPException from inside the
         # try block; they must not skip the cleanup either.
         await _cleanup(auth, job_id, file_id)
+        log.warning("dictation failed: %s", getattr(exc, "detail", type(exc).__name__))
         raise
 
     background.add_task(_cleanup, auth, job_id, file_id)
