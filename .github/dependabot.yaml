@@ -13,3 +13,22 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+
+  # Залоченные с хешами requirements.txt и digest базового образа тоже сами не
+  # двигаются: без этих записей образ стареет, пока его не пересоберут руками.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      python:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
