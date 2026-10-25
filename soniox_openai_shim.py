@@ -184,10 +184,13 @@ def _presented(request: Request) -> str:
 def _caller(request: Request) -> str:
     """Who is on the other side. Behind Traefik the socket shows the proxy, so
     the forwarded headers are the only way to tell callers apart."""
+    # Capped like the user agent: reached without the shim's Traefik in front,
+    # these headers are whatever the caller wrote, of any length the server takes.
     fwd = request.headers.get("x-forwarded-for", "")
     if fwd:
-        return fwd.split(",")[0].strip()
-    return request.headers.get("x-real-ip") or (request.client.host if request.client else "?")
+        return fwd.split(",")[0].strip()[:64]
+    real = request.headers.get("x-real-ip", "")[:64]
+    return real or (request.client.host if request.client else "?")
 
 
 def _today() -> str:
